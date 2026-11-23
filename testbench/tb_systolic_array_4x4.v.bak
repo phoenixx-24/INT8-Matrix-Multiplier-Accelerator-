@@ -1,0 +1,246 @@
+
+`timescale 1ns/1ps
+
+module tb_systolic_array_4x4;
+
+    reg clk;
+    reg reset;
+    reg clear;
+    reg enable;
+
+    reg signed [7:0] a_row0, a_row1, a_row2, a_row3;
+    reg signed [7:0] b_col0, b_col1, b_col2, b_col3;
+
+    reg [3:0] valid_row;
+    reg [3:0] valid_col;
+
+    wire signed [31:0] c00, c01, c02, c03;
+    wire signed [31:0] c10, c11, c12, c13;
+    wire signed [31:0] c20, c21, c22, c23;
+    wire signed [31:0] c30, c31, c32, c33;
+
+    // Input matrices
+    reg signed [7:0] A [0:3][0:3];
+    reg signed [7:0] B [0:3][0:3];
+
+    // Expected output matrix
+    reg signed [31:0] expected [0:3][0:3];
+
+    integer i, j, t;
+    integer errors;
+
+    // Clock generation: 10 ns period
+    always #5 clk = ~clk;
+
+    // DUT: Device Under Test
+    systolic_array_4x4 dut (
+        .clk(clk),
+        .reset(reset),
+        .clear(clear),
+        .enable(enable),
+
+        .a_row0(a_row0),
+        .a_row1(a_row1),
+        .a_row2(a_row2),
+        .a_row3(a_row3),
+
+        .b_col0(b_col0),
+        .b_col1(b_col1),
+        .b_col2(b_col2),
+        .b_col3(b_col3),
+
+        .valid_row(valid_row),
+        .valid_col(valid_col),
+
+        .c00(c00), .c01(c01), .c02(c02), .c03(c03),
+        .c10(c10), .c11(c11), .c12(c12), .c13(c13),
+        .c20(c20), .c21(c21), .c22(c22), .c23(c23),
+        .c30(c30), .c31(c31), .c32(c32), .c33(c33)
+    );
+
+    // Drive skewed inputs for a particular cycle
+    task drive_cycle;
+        input integer cycle_number;
+        integer r, col;
+        integer k;
+        begin
+            // Default: no valid input
+            valid_row = 4'b0000;
+            valid_col = 4'b0000;
+
+            a_row0 = 0;
+            a_row1 = 0;
+            a_row2 = 0;
+            a_row3 = 0;
+
+            b_col0 = 0;
+            b_col1 = 0;
+            b_col2 = 0;
+            b_col3 = 0;
+
+            // Inject A values with row-wise skew
+            for (r = 0; r < 4; r = r + 1) begin
+                k = cycle_number - r;
+
+                if (k >= 0 && k < 4) begin
+                    valid_row[r] = 1'b1;
+
+                    case (r)
+                        0: a_row0 = A[r][k];
+                        1: a_row1 = A[r][k];
+                        2: a_row2 = A[r][k];
+                        3: a_row3 = A[r][k];
+                    endcase
+                end
+            end
+
+            // Inject B values with column-wise skew
+            for (col = 0; col < 4; col = col + 1) begin
+                k = cycle_number - col;
+
+                if (k >= 0 && k < 4) begin
+                    valid_col[col] = 1'b1;
+
+                    case (col)
+                        0: b_col0 = B[k][col];
+                        1: b_col1 = B[k][col];
+                        2: b_col2 = B[k][col];
+                        3: b_col3 = B[k][col];
+                    endcase
+                end
+            end
+        end
+    endtask
+
+    // Compare one output with its expected value
+    task check_cell;
+        input integer row;
+        input integer col;
+        input signed [31:0] actual;
+        input signed [31:0] expected_value;
+        begin
+            if (actual !== expected_value) begin
+                $display(
+                    "FAIL: C[%0d][%0d] Expected=%0d Actual=%0d",
+                    row, col, expected_value, actual
+                );
+                errors = errors + 1;
+            end
+            else begin
+                $display(
+                    "PASS: C[%0d][%0d] = %0d",
+                    row, col, actual
+                );
+            end
+        end
+    endtask
+
+    initial begin
+
+        clk = 0;
+        reset = 1;
+        clear = 0;
+        enable = 1;
+
+        valid_row = 0;
+        valid_col = 0;
+
+        errors = 0;
+
+        // Initialize matrix A
+        A[0][0] = 1;  A[0][1] = 2;
+        A[0][2] = 3;  A[0][3] = 4;
+
+        A[1][0] = 5;  A[1][1] = 6;
+        A[1][2] = 7;  A[1][3] = 8;
+
+        A[2][0] = 9;  A[2][1] = 10;
+        A[2][2] = 11; A[2][3] = 12;
+
+        A[3][0] = 13; A[3][1] = 14;
+        A[3][2] = 15; A[3][3] = 16;
+
+        // Initialize B as identity matrix
+        for (i = 0; i < 4; i = i + 1) begin
+            for (j = 0; j < 4; j = j + 1) begin
+                if (i == j)
+                    B[i][j] = 1;
+                else
+                    B[i][j] = 0;
+
+                expected[i][j] = A[i][j];
+            end
+        end
+
+        $display("------------------------------------");
+        $display("  4x4 INT8 SYSTOLIC ARRAY TEST");
+        $display("------------------------------------");
+
+        // Reset all PEs
+        repeat (2) @(posedge clk);
+
+        @(negedge clk);
+        reset = 0;
+
+        // Inject data for cycles 0 through 6
+        for (t = 0; t <= 6; t = t + 1) begin
+            drive_cycle(t);
+
+            $display(
+                "Input cycle=%0d A_valid=%b B_valid=%b",
+                t, valid_row, valid_col
+            );
+
+            @(negedge clk);
+        end
+
+        // Stop injecting data and allow the array to drain
+        valid_row = 0;
+        valid_col = 0;
+
+        a_row0 = 0; a_row1 = 0;
+        a_row2 = 0; a_row3 = 0;
+
+        b_col0 = 0; b_col1 = 0;
+        b_col2 = 0; b_col3 = 0;
+
+        repeat (3) @(negedge clk);
+
+        // Check all 16 outputs
+        $display("------------------------------------");
+        $display("       OUTPUT VERIFICATION");
+        $display("------------------------------------");
+
+        check_cell(0,0,c00,expected[0][0]);
+        check_cell(0,1,c01,expected[0][1]);
+        check_cell(0,2,c02,expected[0][2]);
+        check_cell(0,3,c03,expected[0][3]);
+
+        check_cell(1,0,c10,expected[1][0]);
+        check_cell(1,1,c11,expected[1][1]);
+        check_cell(1,2,c12,expected[1][2]);
+        check_cell(1,3,c13,expected[1][3]);
+
+        check_cell(2,0,c20,expected[2][0]);
+        check_cell(2,1,c21,expected[2][1]);
+        check_cell(2,2,c22,expected[2][2]);
+        check_cell(2,3,c23,expected[2][3]);
+
+        check_cell(3,0,c30,expected[3][0]);
+        check_cell(3,1,c31,expected[3][1]);
+        check_cell(3,2,c32,expected[3][2]);
+        check_cell(3,3,c33,expected[3][3]);
+
+        $display("------------------------------------");
+
+        if (errors == 0)
+            $display("ALL 16 OUTPUTS PASSED!");
+        else
+            $display("TEST FAILED: %0d errors", errors);
+
+        $display("------------------------------------");
+
+        $finish;
+    end
+
+endmodule

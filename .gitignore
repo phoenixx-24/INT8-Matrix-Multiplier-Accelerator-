@@ -1,0 +1,22 @@
+
+# Simulation output files
+*.vvp
+*.vcd
+*.fst
+
+# Quartus temporary and generated files
+db/
+incremental_db/
+output_files/
+*.qws
+*.rpt
+*.summary
+*.jdi
+*.smsg
+*.pin
+*.sof
+*.pof
+
+# Windows files
+Thumbs.db
+desktop.ini

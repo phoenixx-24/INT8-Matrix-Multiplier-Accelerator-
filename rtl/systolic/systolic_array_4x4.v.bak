@@ -1,0 +1,93 @@
+
+module systolic_array_4x4 (
+
+    input clk,
+    input reset,
+    input clear,
+    input enable,
+
+    input [3:0] valid_row,
+    input [3:0] valid_col,
+
+    input signed [7:0] a_row0,
+    input signed [7:0] a_row1,
+    input signed [7:0] a_row2,
+    input signed [7:0] a_row3,
+
+    input signed [7:0] b_col0,
+    input signed [7:0] b_col1,
+    input signed [7:0] b_col2,
+    input signed [7:0] b_col3,
+
+    output signed [31:0] c00,
+    output signed [31:0] c01,
+    output signed [31:0] c02,
+    output signed [31:0] c03,
+
+    output signed [31:0] c10,
+    output signed [31:0] c11,
+    output signed [31:0] c12,
+    output signed [31:0] c13,
+
+    output signed [31:0] c20,
+    output signed [31:0] c21,
+    output signed [31:0] c22,
+    output signed [31:0] c23,
+
+    output signed [31:0] c30,
+    output signed [31:0] c31,
+    output signed [31:0] c32,
+    output signed [31:0] c33
+
+);
+
+    wire signed [7:0] a [0:3][0:4];
+    wire signed [7:0] b [0:4][0:3];
+
+    wire valid_a [0:3][0:4];
+    wire valid_b [0:4][0:3];
+
+    assign a[0][0] = a_row0;
+    assign a[1][0] = a_row1;
+    assign a[2][0] = a_row2;
+    assign a[3][0] = a_row3;
+
+    assign b[0][0] = b_col0;
+    assign b[0][1] = b_col1;
+    assign b[0][2] = b_col2;
+    assign b[0][3] = b_col3;
+
+    genvar i, j;
+
+    generate
+        for (i = 0; i < 4; i = i + 1) begin : ROW
+            for (j = 0; j < 4; j = j + 1) begin : COL
+
+                wire [31:0] unused_accumulator;
+
+                processing_element pe (
+
+                    .clk(clk),
+                    .reset(reset),
+                    .clear(clear),
+                    .enable(enable),
+
+                    .valid_in(valid_a[i][j] & valid_b[i][j]),
+
+                    .a_in(a[i][j]),
+                    .b_in(b[i][j]),
+
+                    .a_out(a[i][j+1]),
+                    .b_out(b[i+1][j]),
+
+                    .valid_out(),
+
+                    .accumulator(unused_accumulator)
+
+                );
+
+            end
+        end
+    endgenerate
+
+endmodule
